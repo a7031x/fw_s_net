@@ -134,8 +134,8 @@ class Model(object):
 		with tf.name_scope("self-matching"):
 			bilstm_cell = tf.contrib.rnn.BasicLSTMCell(hidden_size)
 			
-			def self_match_attention(t,p_i,len_p_i,state,batch_val):
-				v_p_t = tf.reshape(p_i[t],[1,-1])
+			def self_match_attention(t,p_i,len_p_i,state,batch_val):#iterate t over len_p_i
+				v_p_t = tf.reshape(p_i[t],[1,-1])#[1, 75]
 				v_p = p_i
 				with tf.variable_scope("w"):
 					w_v_p = tf.get_variable(shape = [hidden_size, hidden_size],
@@ -165,18 +165,17 @@ class Model(object):
 				return t,p_i,len_p_i,next_state,batch_val
 
 			def self_match_sentence(i,h):
-				p_i = v_p[i]
+				p_i = v_p[i]#p_i: [len_p_i, 75]
 				len_p_i = tf.cast(seq_len(passage_mask[i]),tf.int32)
 
-				state = bilstm_cell.zero_state(batch_size =1, dtype = tf.float32)
+				state = bilstm_cell.zero_state(batch_size=1, dtype=tf.float32)
 				batch_val = tf.TensorArray(dtype=tf.float32, size=1)
 
 				t = tf.constant(0)
 				c = lambda a, x, y, z, s  : tf.less(a, len_p_i)
 				b = lambda a, x, y, z, s  : self_match_attention(a, x, y, z, s)
 
-				res = tf.while_loop(cond = c, body =b,
-									loop_vars = (t,p_i,len_p_i,state,batch_val))
+				res = tf.while_loop(cond=c, body=b, loop_vars=(t,p_i,len_p_i,state,batch_val))
 
 				tem = tf.squeeze(res[-1].stack(),axis=1)
 				h = h.write(i,tem)
@@ -188,8 +187,7 @@ class Model(object):
 				c = lambda x,y : tf.less(x,tf.cast(batch_size, tf.int32))
 				b = lambda x,y : self_match_sentence(x,y)
 				i = tf.constant(0)
-				res = tf.while_loop(cond = c, body = b,
-									 loop_vars = (i,h))
+				res = tf.while_loop(cond=c, body=b, loop_vars=(i,h))
 				h_p = res[-1].stack()
 				print(h_p)
 		
@@ -204,7 +202,7 @@ class Model(object):
 				shape_u_q = tf.shape(u_q)
 				sum_m = tf.reshape(tf.matmul(tf.reshape(u_q,[-1,hidden_size]),w_u_q),shape_u_q)
 				sum_m += tf.matmul(V_r_q,w_v_q)
-				s = tf.matmul(tf.reshape(tf.tanh(sum_m),[-1,hidden_size]),e)  # [bs*len,1]
+				s = tf.matmul(tf.reshape(tf.tanh(sum_m),[-1,hidden_size]),e)  # [batch*len,1]
 				exps = tf.reshape(tf.exp(s), [-1, question_len])
 				alphas = exps / tf.reshape(tf.reduce_sum(exps, 1), [-1, 1])
 				initial_s = tf.reduce_sum(u_q * tf.reshape(alphas, [-1, question_len, 1]), 1)  #[batch_size,hidden_size]
@@ -223,7 +221,7 @@ class Model(object):
 				for i in range(2):
 					if(i==0):
 						sum_m = tf.reshape(tf.reshape(tf.matmul(tf.reshape(h_p,[-1,hidden_size]),w_h_p),shape_h_p) + tf.matmul(initial_s,w_h_a),[-1,hidden_size])
-						s = tf.matmul(tf.tanh(sum_m),e)
+						s = tf.matmul(tf.tanh(sum_m), e)
 						exps = tf.reshape(tf.exp(s), [-1, passage_len])
 						alphas = exps / tf.reshape(tf.reduce_sum(exps, 1), [-1, 1])
 						predictions.append(alphas)
@@ -231,10 +229,10 @@ class Model(object):
 						#a_k = tf.reduce_sum(q_i* tf.reshape(alphas, [len_q_i, 1]), 0)
 						input_a = tf.reduce_sum(h_p*alphas, 1)
 						
-						initial_s = tf.tuple([initial_s,initial_s])
+						initial_s = tf.tuple([initial_s, initial_s])
 					else:
 						sum_m = tf.reshape(tf.reshape(tf.matmul(tf.reshape(h_p,[-1,hidden_size]),w_h_p),shape_h_p) + tf.matmul(initial_s.h,w_h_a),[-1,hidden_size])
-						s = tf.matmul(tf.tanh(sum_m),e)
+						s = tf.matmul(tf.tanh(sum_m), e)
 						exps = tf.reshape(tf.exp(s), [-1, passage_len])
 						alphas = exps / tf.reshape(tf.reduce_sum(exps, 1), [-1, 1])
 						predictions.append(alphas)
@@ -242,7 +240,7 @@ class Model(object):
 						#a_k = tf.reduce_sum(q_i* tf.reshape(alphas, [len_q_i, 1]), 0)
 						input_a = tf.reduce_sum(h_p*alphas, 1)
 					
-					_, initial_s = answer_lstm.call(input_a ,initial_s)
+					_, initial_s = answer_lstm.call(input_a, initial_s)
 					
 
 		with tf.name_scope("loss"):
