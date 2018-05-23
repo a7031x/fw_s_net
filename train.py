@@ -2,6 +2,9 @@ from __future__ import print_function
 
 import tensorflow as tf
 import numpy as np
+import time
+import datetime
+import os
 from model import Model
 from data_stream import *
 
@@ -14,7 +17,7 @@ tf.flags.DEFINE_float("l2_reg_lambda", 0.0, "L2 regularizaion lambda (default: 0
 tf.flags.DEFINE_integer("num_epochs", 50, "Number of training epochs (default: 200)")
 tf.flags.DEFINE_integer("evaluate_every", 50000, "Evaluate model on dev set after this many steps (default: 100)")
 tf.flags.DEFINE_integer("checkpoint_every", 1000, "Save model after this many steps (default: 100)")
-tf.flags.DEFINE_integer("val_percentage", 0.1, "Validation Percentage(default: 0.1)")
+tf.flags.DEFINE_float("val_percentage", 0.1, "Validation Percentage(default: 0.1)")
 
 # Misc Parameters
 tf.flags.DEFINE_boolean("allow_soft_placement", True, "Allow device soft device placement")
@@ -22,7 +25,7 @@ tf.flags.DEFINE_boolean("log_device_placement", False, "Log placement of ops on 
 
 
 FLAGS = tf.flags.FLAGS
-FLAGS._parse_flags()
+#FLAGS._parse_flags()
 print("\nParameters:")
 for attr, value in sorted(FLAGS.__flags.items()):
 	print("{} = {}".format(attr.upper(), value))
@@ -61,7 +64,8 @@ with tf.Graph().as_default():
 		print("Writing to {}\n".format(out_dir))
 		
 		loss_summary = tf.summary.scalar("loss", model.loss)
-		acc_summary = tf.summary.scalar("accuracy", model.accuracy)
+		acc_summary = tf.summary.scalar("accuracy_start", model.accuracy_start)
+		acc_summary = tf.summary.scalar("accuracy_stop", model.accuracy_stop)
 
 		train_summary_op = tf.summary.merge([loss_summary, acc_summary, grad_summaries_merged])
 		train_summary_dir = os.path.join(out_dir, "summaries", "train")
@@ -78,15 +82,15 @@ with tf.Graph().as_default():
 			  model.start_index : start_batch,
 			  model.stop_index : stop_batch
 			}
-			_, step, summaries, loss, accuracy = sess.run(
-				[train_op, global_step, train_summary_op,model.loss, model.accuracy],
+			_, step, summaries, loss = sess.run(
+				[train_op, global_step, train_summary_op,model.loss],
 				feed_dict)
 			time_str = datetime.datetime.now().isoformat()
 #			print("{}: step {},loss {:g}, acc {:g}".format(time_str, step,loss, accuracy))
 			train_summary_writer.add_summary(summaries, step)
 		
 		def val_step(writer=None):
-			v = data_processing.get_batches()
+			v = get_batches()
 			length = len()
 			acc = []
 			losses =[]

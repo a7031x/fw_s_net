@@ -224,7 +224,7 @@ class Model(object):
 						s = tf.matmul(tf.tanh(sum_m), e)
 						exps = tf.reshape(tf.exp(s), [-1, passage_len])
 						alphas = exps / tf.reshape(tf.reduce_sum(exps, 1), [-1, 1])
-						predictions.append(alphas)
+						predictions.append(exps)
 						alphas = tf.reshape(alphas, [-1,passage_len,1])
 						#a_k = tf.reduce_sum(q_i* tf.reshape(alphas, [len_q_i, 1]), 0)
 						input_a = tf.reduce_sum(h_p*alphas, 1)
@@ -235,12 +235,12 @@ class Model(object):
 						s = tf.matmul(tf.tanh(sum_m), e)
 						exps = tf.reshape(tf.exp(s), [-1, passage_len])
 						alphas = exps / tf.reshape(tf.reduce_sum(exps, 1), [-1, 1])
-						predictions.append(alphas)
+						predictions.append(exps)
 						alphas = tf.reshape(alphas, [-1,passage_len,1])
 						#a_k = tf.reduce_sum(q_i* tf.reshape(alphas, [len_q_i, 1]), 0)
 						input_a = tf.reduce_sum(h_p*alphas, 1)
 					
-					_, initial_s = answer_lstm.call(input_a, initial_s)
+					_, initial_s = answer_lstm(input_a, initial_s)
 					
 
 		with tf.name_scope("loss"):
@@ -248,6 +248,10 @@ class Model(object):
 			pred_end = predictions[1]     #  [batch_size , passage_len]
 
 			def calc_loss(pred, ind):
+				loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=pred, labels=ind)
+				loss *= passage_mask
+				return tf.reduce_sum(loss)
+				'''
 				loss = 0.0
 				for batch in pred:
 					for i,val in enumerate(batch):
@@ -256,13 +260,14 @@ class Model(object):
 						else:
 							loss+= tf.log(1-float(val))
 				return loss
+				'''
 
 			self.loss = calc_loss(pred_start, self.start_index) + calc_loss(pred_end, self.stop_index)
 
 		with tf.name_scope("accuracy"):
 
-			correct_start = tf.equal(tf.argmax(pred_start, 1), self.start_index)
+			correct_start = tf.equal(tf.argmax(pred_start, 1, output_type=tf.int32), self.start_index)
 			self.accuracy_start = tf.reduce_mean(tf.cast(correct_start, 'float'))
 
-			correct_stop = tf.equal(tf.argmax(pred_stop, 1), self.stop_index)
+			correct_stop = tf.equal(tf.argmax(pred_end, 1, output_type=tf.int32), self.stop_index)
 			self.accuracy_stop = tf.reduce_mean(tf.cast(correct_stop, 'float'))
