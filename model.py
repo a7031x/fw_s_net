@@ -33,63 +33,7 @@ class Model(object):
 			input_shape = tf.shape(self.passage_repres)
 			passage_len = input_shape[1]
 			input_dim += input_shape[2]
-		"""
-		
-			if with_char and char_vocab is not None:
-				self.question_char_lengths = tf.placeholder(tf.int32, [None,None]) # [batch_size, question_len]
-				self.passage_char_lengths = tf.placeholder(tf.int32, [None,None]) # [batch_size, passage_len]
-				self.question_chars = tf.placeholder(tf.int32, [None, None, None]) # [batch_size, question_len, q_char_len]
-				self.passage_chars = tf.placeholder(tf.int32, [None, None, None]) # [batch_size, passage_len, p_char_len]
-				input_shape = tf.shape(self.question_chars)
-				batch_size = input_shape[0]
-				question_len = input_shape[1]
-				q_char_len = input_shape[2]
-				input_shape = tf.shape(self.passage_chars)
-				passage_len = input_shape[1]
-				p_char_len = input_shape[2]
-				char_dim = char_vocab.word_dim
-				self.char_embedding = tf.get_variable("char_embedding", initializer=tf.constant(char_vocab.word_vecs), 
-					dtype=tf.float32)
-				question_char_repres = tf.nn.embedding_lookup(self.char_embedding, self.question_chars) # [batch_size, question_len, q_char_len, char_dim]
-				question_char_repres = tf.reshape(question_char_repres, shape=[-1, q_char_len, char_dim])
-				question_char_lengths = tf.reshape(self.question_char_lengths, [-1])
-				passage_char_repres = tf.nn.embedding_lookup(self.char_embedding, self.passage_chars) # [batch_size, passage_len, p_char_len, char_dim]
-				passage_char_repres = tf.reshape(passage_char_repres, shape=[-1, p_char_len, char_dim])
-				passage_char_lengths = tf.reshape(self.passage_char_lengths, [-1])
-				with tf.variable_scope('char_lstm'):
-					# lstm cell
-					char_lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(char_lstm_dim)
-					# dropout
-					if is_training: char_lstm_cell = tf.nn.rnn_cell.DropoutWrapper(char_lstm_cell, 
-						output_keep_prob=(1 - dropout_rate))
-					char_lstm_cell = tf.nn.rnn_cell.MultiRNNCell([char_lstm_cell])
-					# question_representation
-					question_char_outputs = my_rnn.dynamic_rnn(char_lstm_cell, question_char_repres, 
-							sequence_length=question_char_lengths,dtype=tf.float32)[0] # [batch_size*question_len, q_char_len, char_lstm_dim]
-					question_char_outputs = question_char_outputs[:,-1,:]
-					question_char_outputs = tf.reshape(question_char_outputs, [batch_size, question_len, char_lstm_dim])
-				 
-					tf.get_variable_scope().reuse_variables()
-					# passage representation
-					passage_char_outputs = my_rnn.dynamic_rnn(char_lstm_cell, passage_char_repres, 
-							sequence_length=passage_char_lengths,dtype=tf.float32)[0] # [batch_size*question_len, q_char_len, char_lstm_dim]
-					passage_char_outputs = passage_char_outputs[:,-1,:]
-					passage_char_outputs = tf.reshape(passage_char_outputs, [batch_size, passage_len, char_lstm_dim])
-					
-				question_repres.append(question_char_outputs)
-				passage_repres.append(passage_char_outputs)
-				input_dim += char_lstm_dim
-		question_repres = tf.concat(2, question_repres) # [batch_size, question_len, dim]
-		passage_repres = tf.concat(2, passage_repres) # [batch_size, passage_len, dim]
-		"""
-
-		#if is_training:
-		#	self.question_repres = tf.nn.dropout(self.question_repres, (1 - self.dropout_rate))
-		#	self.passage_repres = tf.nn.dropout(self.passage_repres, (1 - self.dropout_rate))
-		#else:
-		#	self.question_repres = tf.mul(self.question_repres, (1 - self.dropout_rate))
-		#	self.passage_repres = tf.mul(self.passage_repres, (1 - self.dropout_rate))
-		
+	
 		passage_mask = tf.sequence_mask(self.passage_lengths, passage_len, dtype=tf.float32) # [batch_size, passage_len]
 		question_mask = tf.sequence_mask(self.question_lengths, question_len, dtype=tf.float32) # [batch_size, question_len]
 
@@ -123,21 +67,17 @@ class Model(object):
 		with tf.name_scope("q-p_attention"):
 			lstm_m_cell = tf.contrib.rnn.BasicLSTMCell(num_units=hidden_size)
 
-			def match_attention(k, q_i, p_i, len_q_i, state, batch_tensor):
-				p_i_k = tf.reshape(p_i[k], [1, -1])
-				q_i_k = tf.slice(q_i, begin=[0,0], size=[len_q_i, hidden_size])
+			def match_attention(k, q_i, p_i, len_q_i, state, batch_tensor):#iterate k over len_p_i
+				p_i_k = tf.reshape(p_i[k], [1, -1])#[1, 75]
+				q_i_k = tf.slice(q_i, begin=[0,0], size=[len_q_i, hidden_size])#[len_q_i, 75]
 				
 				with tf.variable_scope('attn_weights'):
-					w_s = tf.get_variable(shape=[hidden_size, hidden_size],
-										   name='w_s')
-					w_t = tf.get_variable(shape=[hidden_size, hidden_size],
-										   name='w_t')
-					w_m = tf.get_variable(shape=[hidden_size, hidden_size],
-										   name='w_m')
-					w_e = tf.get_variable(shape=[hidden_size, 1],
-										  name='w_e')
+					w_s = tf.get_variable(shape=[hidden_size, hidden_size], name='w_s')#w_u_q
+					w_t = tf.get_variable(shape=[hidden_size, hidden_size], name='w_t')#w_u_p
+					w_m = tf.get_variable(shape=[hidden_size, hidden_size], name='w_m')
+					w_e = tf.get_variable(shape=[hidden_size, 1], name='w_e')
 
-				m_lstm_state = tf.reshape(state.h,[1,-1])
+				m_lstm_state = tf.reshape(state.h, [1,-1])
 				sum_m = tf.matmul(q_i_k, w_s) + tf.matmul(p_i_k, w_t) + tf.matmul(m_lstm_state, w_m)
 				s_k = tf.matmul(tf.tanh(sum_m), w_e)
 
@@ -145,8 +85,8 @@ class Model(object):
 				alphas = exps / tf.reshape(tf.reduce_sum(exps, 0), [1])
 				a_k = tf.reduce_sum(q_i* tf.reshape(alphas, [len_q_i, 1]), 0)
 
-				a_k = tf.reshape(a_k, [1,hidden_size])
-				m_k = tf.concat([p_i_k , a_k], axis=1)
+				c_t_Q = tf.reshape(a_k, [1,hidden_size])#c_t_Q [1, 75]
+				m_k = tf.concat([p_i_k , c_t_Q], axis=1)
 				with tf.variable_scope('lstm_m_step'):
 					out, next_state = lstm_m_cell(inputs=m_k, state=state)
 				
@@ -163,15 +103,15 @@ class Model(object):
 				len_q_i = tf.cast(len_q_i, tf.int32)
 				len_p_i = tf.cast(len_p_i, tf.int32)  
 				state = lstm_m_cell.zero_state(batch_size=1, dtype=tf.float32)
-				batch_tensor = tf.TensorArray(dtype=tf.float32, size=tf.cast(len_q_i, tf.int32))
+				batch_tensor = tf.TensorArray(dtype=tf.float32, size=tf.cast(len_p_i, tf.int32))
 				# inner loop
 				k = tf.constant(0)
-				c = lambda a, x, y, z, s, u: tf.less(a, tf.cast(len_q_i, tf.int32))
+				c = lambda a, x, y, z, s, u: tf.less(a, tf.cast(len_p_i, tf.int32))
 				b = lambda a,x,y,z,s,u  : match_attention(a,x,y,z,s,u)
 				res = tf.while_loop(cond=c, body=b, 
 								   loop_vars=(k, q_i, p_i, len_q_i, state, batch_tensor))
 				
-				temp = tf.squeeze(res[-1].stack(),axis = 1)
+				temp = tf.squeeze(res[-1].stack(),axis = 1)#[len_p_i, 75]
 				h_m_ta = h_m_ta.write(i, temp)
 				
 				i = tf.add(i,1)
@@ -183,13 +123,13 @@ class Model(object):
 				h_m_ta = tf.TensorArray(dtype=tf.float32, size=batch_size)
 				
 				#h_m_ta = np.array([10,15,75])
-				c = lambda x ,y: tf.less(x, batch_size)
-				b = lambda x ,y: match_sentence(x,y)
+				c = lambda x,y: tf.less(x, batch_size)
+				b = lambda x,y: match_sentence(x,y)
 				i = tf.constant(0)
 				h_m_res = tf.while_loop(cond=c, body=b,
 									   loop_vars = (i, h_m_ta))
 				
-				v_p = h_m_res[-1].stack()
+				v_p = h_m_res[-1].stack()#[batch, len_p, 75]
 
 		with tf.name_scope("self-matching"):
 			bilstm_cell = tf.contrib.rnn.BasicLSTMCell(hidden_size)
